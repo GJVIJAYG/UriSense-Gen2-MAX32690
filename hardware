@@ -1,1 +1,63 @@
+# UriSense Gen-2: Hardware & Sensor Interface Specification V1 
 
+This document outlines the mixed-signal frontend, optomechanical reading chamber, and pin mapping between the **Analog Devices MAX32690EVKIT** and the UriSense Gen-2 sensor modules.
+
+---
+
+## 1. System Power & Voltage Domains
+
+| Domain | Voltage | Source / Regulator | Function |
+| :--- | :--- | :--- | :--- |
+| **V_CORE** | 1.1V | MAX32690 Internal SIMO Buck | Cortex-M4F core, cache, and DSP logic |
+| **V_IO** | 3.3V | MAX32690EVKIT LDO Rail | Digital I/O, I2C pull-ups, ST7735 display |
+| **V_REF** | 2.500V | EVKIT Onboard Ultra-Low-Drift Ref (LTC6655) | SAR ADC reference for precision EIS sampling |
+| **V_OPT** | 3.3V (Filtered) | Dedicated Ferrite Bead + RC Filter | Multi-spectral optical array & LED drivers |
+
+---
+
+## 2. Sensor Interfacing & Pin Mapping (MAX32690 Header)
+
+### A. Multispectral Optical Subsystem (I2C0)
+* **Sensor IC:** ams OSRAM AS7341 (11-Channel Visible/NIR Spectral Engine)
+* **Spectral Coverage:** 8 visible channels (415 nm to 680 nm), 1 Clear, 1 Flicker, 1 NIR (910 nm).
+* **Interface:** Fast-Mode I2C (400 kHz) with 2.2 kΩ pull-ups to `V_IO`.
+
+| MAX32690 Pin | Signal Name | Target Pin (AS7341) | Description |
+| :--- | :--- | :--- | :--- |
+| **P0.16** | `I2C0_SCL` | `SCL` | I2C Serial Clock |
+| **P0.17** | `I2C0_SDA` | `SDA` | I2C Serial Data |
+| **P0.18** | `GPIO_INT` | `INT` | Spectral integration completion interrupt |
+| **P0.19** | `GPIO_LED_EN` | `ENABLE_LED` | Synchronous narrow-band LED driver strobe |
+
+### B. Precision Electrochemical Impedance / Conductivity Probe (ADC0)
+* **Transducer:** Gold-plated interdigital microelectrode (IDE) probe / clinical flow-cell pins.
+* **Measurement Modality:** AC-coupled pseudo-sinusoidal / pulsed impedance spectroscopy for Specific Gravity (SG) and ionic osmolality.
+
+| MAX32690 Pin | Signal Name | Conditioning Circuit | Description |
+| :--- | :--- | :--- | :--- |
+| **AIN0 (P2.0)** | `ADC_EIS_IN` | Low-noise buffer (TSV792), passive anti-aliasing filter (fc = 50 kHz) | 12-Bit SAR ADC input (sampled at 1 MSPS) |
+| **P0.20** | `EIS_EXCITE` | AC excitation generator (capacitively coupled) | 1 kHz – 10 kHz excitation probe signal |
+| **VREF+** | `ADC_REF_EXT` | Filtered 2.5V precision reference header | Eliminates battery rail sag artifacts |
+
+### C. Onboard ST7735 1.45" Color TFT Display (Integrated on EVKIT)
+* **Bus:** SPI1 (up to 24 MHz)
+* **Display Format:** 128 × 128 RGB
+* **Signals:** `SPI1_MOSI` (P0.22), `SPI1_SCK` (P0.21), `TFT_CS` (P0.24), `TFT_DC` (P0.25), `TFT_RST` (P0.26).
+
+---
+
+## 3. Optomechanical Light-Tight Chamber Requirements
+
+1. **Optical Isolation:** Enclosure fabricated in matte-black PETG to prevent external ambient light leakage (>60 dB ambient attenuation).
+2. **Fixed Focal Distance:** Strict 3.5 mm clearance between the AS7341 sensor aperture and reagent strip pads to maintain repeatable numerical aperture (NA).
+3. **Anti-Reflective Coating:** Inner chamber features knife-edge baffles to suppress secondary reflections from liquid meniscus surfaces.
+4. **Mechanical Stepper / Alignment Carrier:** Precision slot alignment ensuring each reagent pad settles sequentially over the optical aperture.
+
+---
+
+## 4. Hardware Verification & Bring-Up Checklist
+
+- [ ] Measure 3.3V rail ripple under optical LED strobe (<15 mV target).
+- [ ] Verify 2.5V reference stability using high-resolution DMM at test point `TP_VREF`.
+- [ ] Confirm I2C communication by reading `WHO_AM_I` register (`0x00`) from AS7341 (Expected: `0x24`).
+- [ ] Validate ADC zero-scale and full-scale calibration against reference resistors.
